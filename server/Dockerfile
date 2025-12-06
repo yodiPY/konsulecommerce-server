@@ -21,8 +21,9 @@ COPY package.json /app/package.json
 RUN npm install --production
 COPY server.js /app/server.js
 
-# Create models dir mount point
+# Bundle model into the image so MODEL_PATH=/models/ggml-small.bin works without a volume
 RUN mkdir -p /models
+COPY models/ggml-small.bin /models/ggml-small.bin
 
 # Expose port
 EXPOSE 3000
