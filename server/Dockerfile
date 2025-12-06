@@ -5,7 +5,6 @@ FROM ubuntu:22.04 as builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install deps + fix SSL issue for Railway
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
@@ -18,14 +17,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Clone & build whisper.cpp
+# Clone and build whisper.cpp using cmake (correct for new versions)
 RUN git clone https://github.com/ggerganov/whisper.cpp.git \
     && cd whisper.cpp \
+    && mkdir build \
+    && cd build \
+    && cmake .. \
     && make -j$(nproc)
 
 
 # ============================
-# Stage 2: Final Image
+# Stage 2: Runtime
 # ============================
 FROM ubuntu:22.04
 
@@ -35,29 +37,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     curl \
-    ca-certificates \
     wget \
     nodejs \
     npm \
+    ca-certificates \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy whisper binary
-COPY --from=builder /app/whisper.cpp/main /usr/local/bin/whisper
+
+# COPY the actual binary (correct path!)
+COPY --from=builder /app/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper
 RUN chmod +x /usr/local/bin/whisper
 
-# Download Whisper model (stable URL)
+# Download Whisper model
 RUN mkdir -p /models \
  && wget -q -O /models/ggml-small.bin \
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin?download=true"
 
-# Node.js server
+# Node server
 WORKDIR /app
 COPY package.json .
 RUN npm install --production
 COPY server.js .
 
-# Environment variables
+# ENV
 ENV MODEL_PATH=/models/ggml-small.bin
 ENV BINARY_PATH=/usr/local/bin/whisper
 ENV PORT=3000
