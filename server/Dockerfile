@@ -12,7 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     wget \
     && update-ca-certificates \
-    && git config --global http.sslVerify false \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -46,12 +45,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy BINARY & LIBRARY
+# Copy whisper binary ONLY (tidak ada libwhisper.so.1!)
 COPY --from=builder /app/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper
-COPY --from=builder /app/whisper.cpp/build/lib/libwhisper.so.1 /usr/local/lib/libwhisper.so.1
-
-RUN chmod +x /usr/local/bin/whisper \
-    && ldconfig
+RUN chmod +x /usr/local/bin/whisper
 
 # Download model
 RUN mkdir -p /models \
