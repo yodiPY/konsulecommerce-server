@@ -13,7 +13,10 @@ RUN apt-get update \
 WORKDIR /opt
 RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git \
   && cd whisper.cpp \
-  && make -j$(nproc)
+  && make -j$(nproc) \
+  && chmod +x main \
+  && mkdir -p /usr/local/bin \
+  && cp main /usr/local/bin/whisper
 
 # =====================================
 # Download Whisper model automatically
@@ -35,6 +38,7 @@ EXPOSE 3000
 
 # Env vars
 ENV MODEL_PATH=/models/ggml-small.bin
-ENV BINARY_PATH=/opt/whisper.cpp/main
+ENV BINARY_PATH=/usr/local/bin/whisper
 
 CMD ["node", "server.js"]
+
