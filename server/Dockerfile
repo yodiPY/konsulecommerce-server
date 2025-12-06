@@ -16,14 +16,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Clone & build whisper.cpp with cmake
+# Clone & build static whisper.cpp
 RUN git clone https://github.com/ggerganov/whisper.cpp.git \
     && cd whisper.cpp \
     && mkdir build \
     && cd build \
-    && cmake .. \
+    && cmake .. -DWHISPER_GGML_NO_SHARED=1 \
     && make -j$(nproc)
-
+    
 
 # ============================
 # Stage 2: Runtime
@@ -36,7 +36,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     curl \
-    wget \
     nodejs \
     npm \
     ca-certificates \
@@ -45,7 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy whisper binary ONLY (tidak ada libwhisper.so.1!)
+# Copy ONLY the static binary (no .so needed)
 COPY --from=builder /app/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper
 RUN chmod +x /usr/local/bin/whisper
 
