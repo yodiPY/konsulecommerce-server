@@ -1,54 +1,58 @@
-# ============================
-# Stage 1: Build whisper.cpp
-# ============================
-FROM ubuntu:22.04 AS builder
+# =======================
+# 1. BUILDER: build whisper.cpp
+# =======================
+FROM debian:bookworm AS builder
 
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    git
+    git build-essential cmake ffmpeg curl
 
 WORKDIR /app
 
 # Clone whisper.cpp
-RUN git clone --depth=1 https://github.com/ggerganov/whisper.cpp.git
+RUN git clone https://github.com/ggerganov/whisper.cpp
 
-# Build whisper-server (default build target)
-RUN mkdir -p whisper.cpp/build \
- && cd whisper.cpp/build \
- && cmake .. -DCMAKE_BUILD_TYPE=Release \
- && make -j4
+WORKDIR /app/whisper.cpp
 
-# ============================
-# Stage 2: Runtime
-# ============================
-FROM ubuntu:22.04
+# Build whisper CLI (main)
+RUN make -j4
 
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    curl \
-    libstdc++6 \
-    nodejs \
-    npm
+# Pastikan binary ada
+RUN ls -lah /app/whisper.cpp/main
 
+
+# =======================
+# 2. RUNTIME
+# =======================
+FROM node:18-slim
+
+# ffmpeg untuk konversi suara
+RUN apt-get update && apt-get install -y ffmpeg curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Folder model
+RUN mkdir -p /models
+
+# Download otomatis model small
+RUN curl -L -o /models/ggml-small.bin \
+    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
+
+# Copy binary hasil build
+COPY --from=builder /app/whisper.cpp/main /usr/local/bin/whisper
+RUN chmod +x /usr/local/bin/whisper
+
+# Node environment
 WORKDIR /app
+COPY package*.json ./
+RUN npm install
 
-# Copy whisper-server binary
-COPY --from=builder /app/whisper.cpp/build/bin/whisper-server /usr/local/bin/whisper-server
-RUN chmod +x /usr/local/bin/whisper-server
+# Copy seluruh source code kamu
+COPY . .
 
-# Copy Node.js server
-COPY package.json .
-RUN npm install --production
-COPY server.js .
-
-# ENV
+# Environment variables default
+ENV BINARY_PATH=/usr/local/bin/whisper
+ENV MODEL_PATH=/models/ggml-small.bin
 ENV PORT=3000
-ENV WHISPER_URL=http://localhost:8088
 
 EXPOSE 3000
-EXPOSE 8088
 
-# Start whisper-server + node server
-CMD whisper-server --host 0.0.0.0 --port 8088 & \
-    node server.js
+CMD ["node", "index.js"]
