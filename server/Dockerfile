@@ -16,14 +16,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Clone & build static whisper.cpp
+# Clone & build whisper.cpp with shared lib
 RUN git clone https://github.com/ggerganov/whisper.cpp.git \
     && cd whisper.cpp \
     && mkdir build \
     && cd build \
-    && cmake .. -DWHISPER_GGML_NO_SHARED=1 \
+    && cmake .. -DBUILD_SHARED_LIBS=ON \
     && make -j$(nproc)
-    
 
 # ============================
 # Stage 2: Runtime
@@ -32,10 +31,12 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# 🔥 Tambahkan `wget` DI SINI — ini yang error kemarin
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     curl \
+    wget \
     nodejs \
     npm \
     ca-certificates \
@@ -44,9 +45,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy ONLY the static binary (no .so needed)
+# Copy binary dan shared library
 COPY --from=builder /app/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper
+COPY --from=builder /app/whisper.cpp/build/libwhisper.so.1 /usr/local/lib/
 RUN chmod +x /usr/local/bin/whisper
+RUN ldconfig
 
 # Download model
 RUN mkdir -p /models \
