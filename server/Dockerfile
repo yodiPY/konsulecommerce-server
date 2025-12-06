@@ -15,11 +15,16 @@ RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git \
   && cd whisper.cpp \
   && make -j$(nproc)
 
-# Download Whisper model otomatis
-RUN mkdir -p /models \
-    && wget -O /models/ggml-small.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
+# =====================================
+# Download Whisper model automatically
+# =====================================
+RUN mkdir -p /models && \
+    wget -O /models/ggml-small.bin \
+    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
 
-# Setup Node server
+# =====================================
+# Setup Node.js server
+# =====================================
 WORKDIR /app
 COPY package.json .
 RUN npm install --production
@@ -28,9 +33,8 @@ COPY server.js .
 # Expose port
 EXPOSE 3000
 
-# Environment
+# Env vars
 ENV MODEL_PATH=/models/ggml-small.bin
 ENV BINARY_PATH=/opt/whisper.cpp/main
 
-# Start server
 CMD ["node", "server.js"]
