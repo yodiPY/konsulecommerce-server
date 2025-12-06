@@ -1,26 +1,54 @@
-########### STAGE 1: BUILD ###########
+# ============================
+# Stage 1: Build whisper.cpp
+# ============================
 FROM ubuntu:22.04 AS builder
 
-RUN apt-get update && apt-get install -y build-essential cmake git
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git
 
 WORKDIR /app
 
-RUN rm -rf /app/whisper.cpp
+# Clone whisper.cpp
 RUN git clone --depth=1 https://github.com/ggerganov/whisper.cpp.git
 
-RUN mkdir -p /app/whisper.cpp/build && \
-    cd /app/whisper.cpp/build && \
-    cmake .. -DCMAKE_BUILD_TYPE=Release && \
-    make -j4
+# Build whisper-server (default build target)
+RUN mkdir -p whisper.cpp/build \
+ && cd whisper.cpp/build \
+ && cmake .. -DCMAKE_BUILD_TYPE=Release \
+ && make -j4
 
-RUN ls -R /app/whisper.cpp/build && ls -R /app/whisper.cpp/build/bin || true
-
-########### STAGE 2: RUN ###########
+# ============================
+# Stage 2: Runtime
+# ============================
 FROM ubuntu:22.04
 
-RUN apt-get update && apt-get install -y libstdc++6 ffmpeg
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    libstdc++6 \
+    nodejs \
+    npm
 
-COPY --from=builder /app/whisper.cpp/build/bin/whisper-server /usr/local/bin/whisper
-RUN chmod +x /usr/local/bin/whisper
+WORKDIR /app
 
-CMD ["bash"]
+# Copy whisper-server binary
+COPY --from=builder /app/whisper.cpp/build/bin/whisper-server /usr/local/bin/whisper-server
+RUN chmod +x /usr/local/bin/whisper-server
+
+# Copy Node.js server
+COPY package.json .
+RUN npm install --production
+COPY server.js .
+
+# ENV
+ENV PORT=3000
+ENV WHISPER_URL=http://localhost:8088
+
+EXPOSE 3000
+EXPOSE 8088
+
+# Start whisper-server + node server
+CMD whisper-server --host 0.0.0.0 --port 8088 & \
+    node server.js
