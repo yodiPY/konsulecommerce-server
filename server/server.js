@@ -9,7 +9,7 @@ const upload = multer({ dest: '/tmp' });
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MODEL_PATH = process.env.MODEL_PATH || '/models/ggml-small.bin';
-const BINARY_PATH = process.env.BINARY_PATH || '/opt/whisper.cpp/main';
+const BINARY_PATH = process.env.BINARY_PATH || '/usr/local/bin/whisper'; // FIXED
 const WHISPER_SECRET = process.env.WHISPER_SECRET || null;
 
 app.use(express.json({ limit: '50mb' }));
@@ -27,77 +27,67 @@ async function downloadToFile(url, dest) {
 
 app.post('/transcribe', upload.single('file'), async (req, res) => {
   try {
-    // Simple auth: if WHISPER_SECRET is set, require header x-whisper-key
     if (WHISPER_SECRET) {
-      const key = req.headers['x-whisper-key'] || req.headers['X-Whisper-Key'];
+      const key = req.headers['x-whisper-key'];
       if (!key || String(key) !== WHISPER_SECRET) {
-        console.warn('Unauthorized request to /transcribe');
         return res.status(401).json({ error: 'Unauthorized' });
       }
     }
 
-    // Validate model exists
     if (!fs.existsSync(MODEL_PATH)) {
-      console.error('Model not found at', MODEL_PATH);
-      return res.status(500).json({ error: `Model not found at ${MODEL_PATH}. Place ggml model in /models` });
+      return res.status(500).json({ error: `Model not found at ${MODEL_PATH}` });
     }
 
     let inputPath = null;
+
     if (req.file) {
       inputPath = req.file.path;
-    } else if (req.body && req.body.audioUrl) {
-      // download remote file
-      const tmpName = `/tmp/input-${Date.now()}`;
+    } else if (req.body.audioUrl) {
+      const tmp = `/tmp/input-${Date.now()}`;
       const ext = path.extname(req.body.audioUrl).split('?')[0] || '.webm';
-      inputPath = `${tmpName}${ext}`;
+      inputPath = tmp + ext;
       await downloadToFile(req.body.audioUrl, inputPath);
-    } else if (req.body && req.body.audioBase64) {
-      const data = req.body.audioBase64;
-      const tmpName = `/tmp/input-${Date.now()}.webm`;
-      fs.writeFileSync(tmpName, Buffer.from(data, 'base64'));
-      inputPath = tmpName;
+    } else if (req.body.audioBase64) {
+      const tmp = `/tmp/input-${Date.now()}.webm`;
+      fs.writeFileSync(tmp, Buffer.from(req.body.audioBase64, 'base64'));
+      inputPath = tmp;
     } else {
       return res.status(400).json({ error: 'No audio provided' });
     }
 
     const wavPath = `/tmp/converted-${Date.now()}.wav`;
-    // Convert to 16k mono WAV using ffmpeg
+
     await new Promise((resolve, reject) => {
       const ff = spawn('ffmpeg', ['-y', '-i', inputPath, '-ar', '16000', '-ac', '1', wavPath]);
-      ff.on('close', (code) => {
-        if (code === 0) resolve(); else reject(new Error('ffmpeg failed with ' + code));
-      });
+      ff.on('close', (code) => code === 0 ? resolve() : reject('ffmpeg failed ' + code));
     });
 
-    // Run whisper.cpp binary
     const args = ['-m', MODEL_PATH, '-f', wavPath, '--language', 'id'];
+
     const proc = spawn(BINARY_PATH, args);
     let output = '';
-    proc.stdout.on('data', (chunk) => { output += chunk.toString(); });
-    proc.stderr.on('data', (chunk) => { output += chunk.toString(); });
 
-    const exitCode = await new Promise((resolve) => proc.on('close', resolve));
+    proc.stdout.on('data', chunk => output += chunk.toString());
+    proc.stderr.on('data', chunk => output += chunk.toString());
 
-    // Clean up temp files
-    try { fs.unlinkSync(inputPath); } catch {}
-    try { fs.unlinkSync(wavPath); } catch {}
+    const exit = await new Promise(r => proc.on('close', r));
 
-    if (exitCode !== 0) {
+    fs.unlink(inputPath, () => {});
+    fs.unlink(wavPath, () => {});
+
+    if (exit !== 0) {
       return res.status(500).json({ error: 'Transcription failed', details: output });
     }
 
-    // Try to extract transcription lines from output and return a cleaned text
     const lines = output.split(/\r?\n/)
       .map(l => l.trim())
-      .filter(l => l.length > 0)
-      .filter(l => !/^(\[|\-|=|Loading|Memory|ggml|Allocator|FRAMES|WARN|ERROR|File|WAVE|Detected)/i.test(l))
-      .filter(l => !/^(\d+:\d+:\d+)/.test(l));
+      .filter(l => l && !/^(Loading|Memory|ggml|Allocator|WARN|ERROR|File|Detected)/i.test(l))
+      .filter(l => !/^\d{2}:\d{2}:\d{2}/.test(l));
 
-    const cleaned = lines.join(' ').replace(/\s+/g, ' ').trim();
+    res.json({ text: lines.join(' ').trim() || output });
 
-    res.json({ text: cleaned || output });
   } catch (err) {
-    console.error('Error in /transcribe', err);
+    console.error(err);
     res.status(500).json({ error: String(err) });
   }
 });
