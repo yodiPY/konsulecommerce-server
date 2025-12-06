@@ -16,13 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Clone & build whisper.cpp with shared lib
+# Clone & build whisper.cpp (static binary)
 RUN git clone https://github.com/ggerganov/whisper.cpp.git \
     && cd whisper.cpp \
-    && mkdir build \
-    && cd build \
-    && cmake .. -DBUILD_SHARED_LIBS=ON \
     && make -j$(nproc)
+
 
 # ============================
 # Stage 2: Runtime
@@ -31,7 +29,6 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 🔥 Tambahkan `wget` DI SINI — ini yang error kemarin
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
@@ -45,11 +42,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy binary dan shared library
-COPY --from=builder /app/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper
-COPY --from=builder /app/whisper.cpp/build/libwhisper.so.1 /usr/local/lib/
+# Copy binary static "main"
+COPY --from=builder /app/whisper.cpp/main /usr/local/bin/whisper
 RUN chmod +x /usr/local/bin/whisper
-RUN ldconfig
 
 # Download model
 RUN mkdir -p /models \
