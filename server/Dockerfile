@@ -44,7 +44,6 @@ COPY server.js /app/server.js
 
 # Bundle model into the image so MODEL_PATH=/models/ggml-small.bin works without a volume
 RUN mkdir -p /models
-COPY models/ggml-small.bin /models/ggml-small.bin
 
 # Expose port
 EXPOSE 3000
@@ -74,4 +73,5 @@ ENV MODEL_PATH=/models/ggml-small.bin
 ENV BINARY_PATH=/opt/whisper.cpp/main
 
 CMD ["node", "server.js"]
+
 
