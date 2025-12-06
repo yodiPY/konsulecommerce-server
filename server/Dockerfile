@@ -1,5 +1,5 @@
 # =======================
-# 1. BUILDER: build whisper.cpp
+# 1. BUILDER
 # =======================
 FROM debian:bookworm AS builder
 
@@ -8,16 +8,16 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Clone whisper.cpp
-RUN git clone https://github.com/ggerganov/whisper.cpp
+# Clone terbaru whisper.cpp
+RUN git clone https://github.com/ggerganov/whisper.cpp.git
 
 WORKDIR /app/whisper.cpp
 
-# Build whisper CLI (main)
-RUN make -j4
+# Build (ini otomatis generate binary di build/bin/)
+RUN mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j4
 
-# Pastikan binary ada
-RUN ls -lah /app/whisper.cpp/main
+# Debug: tampilkan isi folder build/bin
+RUN ls -R /app/whisper.cpp/build/bin
 
 
 # =======================
@@ -25,30 +25,28 @@ RUN ls -lah /app/whisper.cpp/main
 # =======================
 FROM node:18-slim
 
-# ffmpeg untuk konversi suara
 RUN apt-get update && apt-get install -y ffmpeg curl && \
     rm -rf /var/lib/apt/lists/*
 
 # Folder model
 RUN mkdir -p /models
 
-# Download otomatis model small
+# Download model small
 RUN curl -L -o /models/ggml-small.bin \
     https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
 
-# Copy binary hasil build
-COPY --from=builder /app/whisper.cpp/main /usr/local/bin/whisper
+# Copy binary utama whisper CLI
+COPY --from=builder /app/whisper.cpp/build/bin/whisper /usr/local/bin/whisper
+
 RUN chmod +x /usr/local/bin/whisper
 
-# Node environment
 WORKDIR /app
+
 COPY package*.json ./
 RUN npm install
 
-# Copy seluruh source code kamu
 COPY . .
 
-# Environment variables default
 ENV BINARY_PATH=/usr/local/bin/whisper
 ENV MODEL_PATH=/models/ggml-small.bin
 ENV PORT=3000
