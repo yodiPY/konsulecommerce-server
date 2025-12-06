@@ -6,17 +6,21 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     build-essential cmake git wget pkg-config libsndfile1-dev \
-    curl ca-certificates ffmpeg nodejs npm \
+    curl ca-certificates ffmpeg nodejs npm python3 \
   && rm -rf /var/lib/apt/lists/*
 
 # Build whisper.cpp
 WORKDIR /opt
 RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git \
   && cd whisper.cpp \
+  && mkdir -p build \
+  && cd build \
+  && cmake .. \
   && make -j$(nproc) \
-  && chmod +x main \
+  && chmod +x ../main \
   && mkdir -p /usr/local/bin \
-  && cp main /usr/local/bin/whisper
+  && cp ../main /usr/local/bin/whisper \
+  && echo "Build whisper.cpp completed successfully"
 
 # =====================================
 # Download Whisper model automatically
