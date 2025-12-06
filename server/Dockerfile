@@ -5,22 +5,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install dependencies
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    build-essential cmake git wget pkg-config libsndfile1-dev \
-    curl ca-certificates ffmpeg nodejs npm python3 \
+    wget unzip ffmpeg libsndfile1-dev curl ca-certificates nodejs npm \
   && rm -rf /var/lib/apt/lists/*
 
-# Build whisper.cpp
+# Download pre-built whisper binary
 WORKDIR /opt
-RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git \
-  && cd whisper.cpp \
-  && mkdir -p build \
-  && cd build \
-  && cmake .. \
-  && make -j$(nproc) \
-  && chmod +x ../main \
-  && mkdir -p /usr/local/bin \
-  && cp ../main /usr/local/bin/whisper \
-  && echo "Build whisper.cpp completed successfully"
+RUN wget https://github.com/ggerganov/whisper.cpp/releases/download/v1.5.0/whisper-bin-x64.zip \
+    && unzip whisper-bin-x64.zip \
+    && chmod +x whisper-bin-x64/main \
+    && mkdir -p /usr/local/bin \
+    && cp whisper-bin-x64/main /usr/local/bin/whisper \
+    && echo "Whisper binary installed successfully"
 
 # =====================================
 # Download Whisper model automatically
