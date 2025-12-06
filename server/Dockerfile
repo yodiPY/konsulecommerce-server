@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Clone and build whisper.cpp using cmake (correct for new versions)
+# Clone & build whisper.cpp with cmake
 RUN git clone https://github.com/ggerganov/whisper.cpp.git \
     && cd whisper.cpp \
     && mkdir build \
@@ -44,23 +44,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /app
 
-# COPY the actual binary (correct path!)
+# Copy BINARY & LIBRARY
 COPY --from=builder /app/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper
-RUN chmod +x /usr/local/bin/whisper
+COPY --from=builder /app/whisper.cpp/build/lib/libwhisper.so.1 /usr/local/lib/libwhisper.so.1
 
-# Download Whisper model
+RUN chmod +x /usr/local/bin/whisper \
+    && ldconfig
+
+# Download model
 RUN mkdir -p /models \
  && wget -q -O /models/ggml-small.bin \
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin?download=true"
 
-# Node server
-WORKDIR /app
 COPY package.json .
 RUN npm install --production
 COPY server.js .
 
-# ENV
 ENV MODEL_PATH=/models/ggml-small.bin
 ENV BINARY_PATH=/usr/local/bin/whisper
 ENV PORT=3000
