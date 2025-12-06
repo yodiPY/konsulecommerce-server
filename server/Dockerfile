@@ -21,8 +21,8 @@ FROM ubuntu:22.04
 
 RUN apt-get update && apt-get install -y libstdc++6
 
-# Copy static binary from builder
-COPY --from=builder /app/build-output/whisper /usr/local/bin/whisper
+# whisper-server adalah satu-satunya binary hasil build
+COPY --from=builder /app/build-output/whisper-server /usr/local/bin/whisper
 RUN chmod +x /usr/local/bin/whisper
 
 WORKDIR /app
