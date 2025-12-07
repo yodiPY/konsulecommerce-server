@@ -37,7 +37,12 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
       }
     }
 
-    // Validate model exists
+    // Validate binary & model exists
+    if (!fs.existsSync(BINARY_PATH)) {
+      console.error('Whisper binary not found at', BINARY_PATH);
+      return res.status(500).json({ error: `Whisper binary not found at ${BINARY_PATH}` });
+    }
+
     if (!fs.existsSync(MODEL_PATH)) {
       console.error('Model not found at', MODEL_PATH);
       return res.status(500).json({ error: `Model not found at ${MODEL_PATH}. Place ggml model in /models` });
