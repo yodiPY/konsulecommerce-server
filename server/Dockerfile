@@ -21,7 +21,7 @@ WORKDIR /opt
 RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git \
     && cd whisper.cpp \
     && make -j$(nproc) \
-    && cp build/bin/main /usr/local/bin/whisper \
+    && cp build/bin/whisper-cli /usr/local/bin/whisper \
     && chmod +x /usr/local/bin/whisper
 
 # Download model
