@@ -67,6 +67,8 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
     }
 
     const wavPath = `/tmp/converted-${Date.now()}.wav`;
+    const txtPath = `/tmp/result-${Date.now()}.txt`;
+
     // Convert to 16k mono WAV using ffmpeg
     await new Promise((resolve, reject) => {
       const ff = spawn('ffmpeg', ['-y', '-i', inputPath, '-ar', '16000', '-ac', '1', wavPath]);
@@ -75,8 +77,8 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
       });
     });
 
-    // Run whisper.cpp binary
-    const args = ['-m', MODEL_PATH, '-f', wavPath, '--language', 'id'];
+    // Run whisper.cpp binary, output to plain text file
+    const args = ['-m', MODEL_PATH, '-f', wavPath, '--language', 'id', '-otxt', '-of', txtPath];
     const proc = spawn(BINARY_PATH, args);
     let output = '';
     proc.stdout.on('data', (chunk) => { output += chunk.toString(); });
@@ -84,7 +86,7 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
 
     const exitCode = await new Promise((resolve) => proc.on('close', resolve));
 
-    // Clean up temp files
+    // Clean up temp audio files
     try { fs.unlinkSync(inputPath); } catch {}
     try { fs.unlinkSync(wavPath); } catch {}
 
@@ -92,16 +94,17 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
       return res.status(500).json({ error: 'Transcription failed', details: output });
     }
 
-    // Try to extract transcription lines from output and return a cleaned text
-    const lines = output.split(/\r?\n/)
-      .map(l => l.trim())
-      .filter(l => l.length > 0)
-      .filter(l => !/^(\[|\-|=|Loading|Memory|ggml|Allocator|FRAMES|WARN|ERROR|File|WAVE|Detected)/i.test(l))
-      .filter(l => !/^(\d+:\d+:\d+)/.test(l));
+    let text = '';
+    try {
+      text = fs.readFileSync(txtPath, 'utf8').trim();
+    } catch {
+      // fallback: kalau txt tidak ada, kirim stdout yang ada
+      text = output.trim();
+    }
 
-    const cleaned = lines.join(' ').replace(/\s+/g, ' ').trim();
+    try { fs.unlinkSync(txtPath); } catch {}
 
-    res.json({ text: cleaned || output });
+    res.json({ text });
   } catch (err) {
     console.error('Error in /transcribe', err);
     res.status(500).json({ error: String(err) });
