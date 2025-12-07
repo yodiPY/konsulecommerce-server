@@ -66,8 +66,9 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No audio provided' });
     }
 
-    const wavPath = `/tmp/converted-${Date.now()}.wav`;
-    const txtPath = `/tmp/result-${Date.now()}.txt`;
+    const stamp = Date.now();
+    const wavPath = `/tmp/converted-${stamp}.wav`;
+    const txtBase = `/tmp/result-${stamp}`;
 
     // Convert to 16k mono WAV using ffmpeg
     await new Promise((resolve, reject) => {
@@ -78,7 +79,8 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
     });
 
     // Run whisper.cpp binary, output to plain text file
-    const args = ['-m', MODEL_PATH, '-f', wavPath, '--language', 'id', '-otxt', '-of', txtPath];
+    // -of expects a prefix, actual file will be `${txtBase}.txt`
+    const args = ['-m', MODEL_PATH, '-f', wavPath, '--language', 'id', '-otxt', '-of', txtBase];
     const proc = spawn(BINARY_PATH, args);
     let output = '';
     proc.stdout.on('data', (chunk) => { output += chunk.toString(); });
@@ -94,17 +96,32 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
       return res.status(500).json({ error: 'Transcription failed', details: output });
     }
 
-    let text = '';
+    let raw = '';
     try {
-      text = fs.readFileSync(txtPath, 'utf8').trim();
+      raw = fs.readFileSync(`${txtBase}.txt`, 'utf8').trim();
     } catch {
-      // fallback: kalau txt tidak ada, kirim stdout yang ada
-      text = output.trim();
+      // fallback: kalau txt tidak ada, pakai stdout yang ada
+      raw = output.trim();
     }
 
-    try { fs.unlinkSync(txtPath); } catch {}
+    try { fs.unlinkSync(`${txtBase}.txt`); } catch {}
 
-    res.json({ text });
+    // Bersihkan: ambil hanya satu kalimat transkripsi tanpa timestamp/log
+    let cleaned = raw
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l.length > 0)
+      // buang baris log & timings
+      .filter(l => !/^whisper_/i.test(l))
+      .filter(l => !/^output_txt:/i.test(l))
+      .filter(l => !/^system_info:/i.test(l))
+      .filter(l => !/^\d{2}:\d{2}:\d{2}/.test(l));
+
+    let firstLine = cleaned[0] || raw;
+    // buang prefix timestamp [00:00:00.000 --> ...]
+    firstLine = firstLine.replace(/^\[[^\]]*\]\s*/, '').trim();
+
+    res.json({ text: firstLine });
   } catch (err) {
     console.error('Error in /transcribe', err);
     res.status(500).json({ error: String(err) });
