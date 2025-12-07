@@ -1,27 +1,19 @@
-FROM ubuntu:22.04
+FROM ghcr.io/ggerganov/whisper.cpp:main as whisper
+
+# Final image with Node.js server
+FROM node:18-bullseye
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Copy whisper binary and runtime tools from base image
+COPY --from=whisper /usr/local/bin/whisper /usr/local/bin/whisper
+COPY --from=whisper /usr/bin/ffmpeg /usr/bin/ffmpeg
+COPY --from=whisper /usr/lib/x86_64-linux-gnu/libsndfile.so.1 /usr/lib/x86_64-linux-gnu/libsndfile.so.1
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    git \
-    ffmpeg \
-    libsndfile1 \
-    curl \
     ca-certificates \
-    nodejs \
-    npm \
     wget \
     && rm -rf /var/lib/apt/lists/*
-
-# Build whisper.cpp and install binary
-WORKDIR /opt
-RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git \
-    && cd whisper.cpp \
-    && make -j$(nproc) \
-    && cp main /usr/local/bin/whisper \
-    && chmod +x /usr/local/bin/whisper
 
 # Download model
 RUN mkdir -p /models && \
@@ -37,8 +29,8 @@ COPY server.js .
 # Environment variables
 ENV MODEL_PATH=/models/ggml-small.bin
 ENV BINARY_PATH=/usr/local/bin/whisper
-ENV PORT=3000
+ENV PORT=8080
 
-EXPOSE 3000
+EXPOSE 8080
 
 CMD ["node", "server.js"]
