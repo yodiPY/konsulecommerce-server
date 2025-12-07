@@ -1,56 +1,40 @@
-# =======================
-# 1. BUILDER
-# =======================
-FROM debian:bookworm AS builder
+FROM ubuntu:22.04
 
-RUN apt-get update && apt-get install -y \
-    git build-essential cmake ffmpeg curl
+ENV DEBIAN_FRONTEND=noninteractive
 
-WORKDIR /app
+# Install dependencies
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    build-essential cmake git wget pkg-config libsndfile1-dev \
+    curl ca-certificates ffmpeg nodejs npm \
+  && rm -rf /var/lib/apt/lists/*
 
-# Clone terbaru whisper.cpp
-RUN git clone https://github.com/ggerganov/whisper.cpp.git
+# Build whisper.cpp
+WORKDIR /opt
+RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git \
+  && cd whisper.cpp \
+  && make -j$(nproc)
 
-WORKDIR /app/whisper.cpp
-
-# Build (ini otomatis generate binary di build/bin/)
-RUN mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j4
-
-# Debug: tampilkan isi folder build/bin
-RUN ls -R /app/whisper.cpp/build/bin
-
-
-# =======================
-# 2. RUNTIME
-# =======================
-FROM node:18-slim
-
-RUN apt-get update && apt-get install -y ffmpeg curl && \
-    rm -rf /var/lib/apt/lists/*
-
-# Folder model
-RUN mkdir -p /models
-
-# Download model small
-RUN curl -L -o /models/ggml-small.bin \
+# =====================================
+# Download Whisper model automatically
+# =====================================
+RUN mkdir -p /models && \
+    wget -O /models/ggml-small.bin \
     https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
 
-# Copy binary utama whisper CLI
-COPY --from=builder /app/whisper.cpp/build/bin/whisper /usr/local/bin/whisper
-
-RUN chmod +x /usr/local/bin/whisper
-
+# =====================================
+# Setup Node.js server
+# =====================================
 WORKDIR /app
+COPY package.json .
+RUN npm install --production
+COPY server.js .
 
-COPY package*.json ./
-RUN npm install
-
-COPY . .
-
-ENV BINARY_PATH=/usr/local/bin/whisper
-ENV MODEL_PATH=/models/ggml-small.bin
-ENV PORT=3000
-
+# Expose port
 EXPOSE 3000
 
-CMD ["node", "index.js"]
+# Env vars
+ENV MODEL_PATH=/models/ggml-small.bin
+ENV BINARY_PATH=/opt/whisper.cpp/main
+
+CMD ["node", "server.js"]
